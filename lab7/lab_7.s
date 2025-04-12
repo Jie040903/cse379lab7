@@ -643,11 +643,9 @@ Timer_Handler:
 	BL output_string
 
 	LDR r0, ptr_to_ball_up_down
-	LDRB r0, [r0]
 	LDRB r1, [r0]
 
 	LDR r0, ptr_to_ball_up_down_speed
-	LDRB r0, [r0]
 	LDRB r2, [r0]
 
 	CMP r2, #0
@@ -657,7 +655,6 @@ Timer_Handler:
 	BNE ball_down
 
 	; move the ball up
-
 	LDR r0, ptr_to_game_board_move
 	BL output_string
 
@@ -678,8 +675,9 @@ Timer_Handler:
 
  	; if column is 3, move ball down
  	LDR r0, ptr_to_ball_up_down
-	LDRB r0, [r0]
-	ADD r0, r0, #1
+	LDRB r1, [r0]
+	ADD r1, r1, #1
+	STRB r1, [r0]
 	B see_ball_move_RL
 
 ball_down:
@@ -695,16 +693,17 @@ ball_down:
 
 	LDR r0, ptr_to_cursor_Column
 	LDRB r1, [r0]
- 	SUB r2, r2, #1
+ 	ADD r2, r2, #1
  	STRB r2, [r1]
 
  	CMP r2, #25
  	BNE see_ball_move_RL
 
- 	; if column is 25, move ball down
+ 	; if column is 25, move ball up
  	LDR r0, ptr_to_ball_up_down
-	LDRB r0, [r0]
-	SUB r0, r0, #1
+	LDRB r1, [r0]
+	SUB r1, r1, #1
+	STRB r1, [r0]
 
 see_ball_move_RL:
 	LDR r0, ptr_to_ball_R_L
