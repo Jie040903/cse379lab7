@@ -364,7 +364,7 @@ draw_ball:
 	BL output_string
 
 	LDR r0, ptr_to_cursor_Column
- 	MOV r2, #10
+ 	MOV r2, #14
  	STRB r2, [r0]
 
 	LDR r4, ptr_to_cursor_Line
@@ -693,10 +693,10 @@ ball_down:
 
 	LDR r0, ptr_to_cursor_Column
 	LDRB r1, [r0]
- 	ADD r2, r2, #1
- 	STRB r2, [r1]
+ 	ADD r1, r1, #1
+ 	STRB r1, [r0]
 
- 	CMP r2, #25
+ 	CMP r1, #22
  	BNE see_ball_move_RL
 
  	; if column is 25, move ball up
