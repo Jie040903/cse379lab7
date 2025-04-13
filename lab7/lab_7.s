@@ -670,7 +670,7 @@ Timer_Handler:
  	SUB r1, r1, #1
  	STRB r1, [r0]
 
- 	CMP r2, #3
+ 	CMP r1, #3 ; changed from r2 to r1
  	BNE see_ball_move_RL
 
  	; if column is 3, move ball down
