@@ -1,3 +1,13 @@
+	.data
+
+	.global ball_color
+	.global p1_color
+	.global p2_color
+
+ball_color: .byte	0x00
+p1_color: .byte	0x00
+p2_color: .byte	0x00
+
 	.text
 	.global uart_init
 	.global uart_interrupt_init
@@ -17,9 +27,116 @@
 	.global illuminate_RGB_LED
 	.global read_tiva_push_button
 	.global int2string
+	.global FPS_goal
+	.global game_board_Gray
+	.global penalties_txt_space
+	.global clear_txt
+	.global color_ball
+	.global color_p1
+	.global color_p2
+	.global print_ball
+	.global print_p1
+	.global print_p2
+	.global p1_win_RGB
+	.global p2_win_RGB
+	.global cursor_Line
+	.global cursor_Column
+	.global end_game_score
+	.global play1_head
+	.global play2_head
+	.global player1_number
+	.global player2_number
+	.global timer_number
 
 
+ptr_to_FPS_goal: .word FPS_goal
+ptr_to_penalties_txt_space: .word penalties_txt_space
+ptr_to_game_board_Gray: .word game_board_Gray
+ptr_to_game_cursor_Line: .word cursor_Line
+ptr_to_game_cursor_Column: .word cursor_Column
+ptr_to_game_end_game_score: .word end_game_score
+ptr_to_game_play1_head: .word play1_head
+ptr_to_game_play2_head: .word play2_head
+ptr_to_game_player1_number: .word player1_number
+ptr_to_game_player2_number: .word player2_number
+ptr_to_game_timer_number: .word timer_number
+
+ptr_to_ball_color: .word ball_color
+ptr_to_p1_color: .word p1_color
+ptr_to_p2_color: .word p2_color
 U0FR: 	.equ 0x18	; UART0 Flag Register
+
+gpio_btn_and_LED_init:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+          ; Your code is placed here
+	; Enable Clock for B, D, and F
+	MOV r4, #0xE608
+	MOVT r4, #0x400F
+	LDRB r5, [r4]
+	ORR r5, r5, #0x2A	; 0010 1010
+	AND r5, r5, #0x2A
+	STRB r5, [r4]
+
+	; Port B
+	MOV r4, #0x5000
+	MOVT r4, #0x4000
+
+	; Pin Direction
+	LDRB r5, [r4, #0x400]
+	ORR r5, r5, #0xF	; Enable Pin Direction for port B's 1111
+	AND r5, r5, #0xF
+	STRB r5, [r4, #0x400]
+
+	; Pin Digital
+	LDRB r5, [r4, #0x51C]
+	ORR r5, r5, #0xF	; Enable Pin Digital for port B's 1111
+	AND r5, r5, #0xF
+	STRB r5, [r4, #0x51C]
+
+
+	; Port D
+	MOV r4, #0x7000
+	MOVT r4, #0x4000
+
+	; Pin Direction
+	LDRB r5, [r4, #0x400]
+	ORR r5, r5, #0x0	; Enable Pin Direction for port D's 1111
+	AND r5, r5, #0x0
+	STRB r5, [r4, #0x400]
+
+	; Pin Digital
+	LDRB r5, [r4, #0x51C]
+	ORR r5, r5, #0xF	; Enable Pin Digital for port D's 1111
+	AND r5, r5, #0xF
+	STRB r5, [r4, #0x51C]
+
+
+	; Port F
+	MOV r4, #0x5000
+	MOVT r4, #0x4002
+
+	; Pin Direction
+	LDRB r5, [r4, #0x400]
+	ORR r5, r5, #0xE	; Enable Pin Direction for port F's 0000 1110
+	AND r5, r5, #0xE
+	STRB r5, [r4, #0x400]
+
+	; Pin Digital
+	LDRB r5, [r4, #0x51C]
+	ORR r5, r5, #0x1E	; Enable Pin Digital for port F's 0001 1110
+	AND r5, r5, #0x1E
+	STRB r5, [r4, #0x51C]
+
+	; Pull-Up Resistor
+	LDRB r5, [r4, #0x510]
+	ORR r5, r5, #0x10	; Enable Pin Digital for port F's 0001 0000
+	AND r5, r5, #0x10
+	STRB r5, [r4, #0x510]
+
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
 
 int2string:
     PUSH {r4-r12, lr}      ; Save registers
@@ -110,9 +227,12 @@ timer_interrupt_init:
 	STRB r7, [r3, #0x004]
 
 	;setting timer interrupt interval period
-	MOV r7, #0x2400
-	MOVT r7, #0xF4
-	STR r7, [r3, #0x028]
+	MOV r0, #0x2400			; add this to lab7_L
+	MOVT r0, #0xF4
+	LDR r1, ptr_to_FPS_goal
+	LDRB r1, [r1]
+	SDIV r0, r0, r1
+	STR r0, [r3, #0x028]
 
 	;setting timer to interrupt processor
 	LDRB r8, [r3, #0x018]
@@ -256,78 +376,6 @@ uart_init:
 	MOV r5, #0x11
 	ORR r5, r5, #1
 	STR r5, [r4]
-
-	POP {r4-r12,lr}  	; Restore registers from stack
-	MOV pc, lr
-
-gpio_btn_and_LED_init:
-	PUSH {r4-r12,lr}	; Spill registers to stack
-
-          ; Your code is placed here
-	; Enable Clock for B, D, and F
-	MOV r4, #0xE608
-	MOVT r4, #0x400F
-	LDRB r5, [r4]
-	ORR r5, r5, #0x2A	; 0010 1010
-	AND r5, r5, #0x2A
-	STRB r5, [r4]
-
-	; Port B
-	MOV r4, #0x5000
-	MOVT r4, #0x4000
-
-	; Pin Direction
-	LDRB r5, [r4, #0x400]
-	ORR r5, r5, #0xF	; Enable Pin Direction for port B's 1111
-	AND r5, r5, #0xF
-	STRB r5, [r4, #0x400]
-
-	; Pin Digital
-	LDRB r5, [r4, #0x51C]
-	ORR r5, r5, #0xF	; Enable Pin Digital for port B's 1111
-	AND r5, r5, #0xF
-	STRB r5, [r4, #0x51C]
-
-
-	; Port D
-	MOV r4, #0x7000
-	MOVT r4, #0x4000
-
-	; Pin Direction
-	LDRB r5, [r4, #0x400]
-	ORR r5, r5, #0x0	; Enable Pin Direction for port D's 1111
-	AND r5, r5, #0x0
-	STRB r5, [r4, #0x400]
-
-	; Pin Digital
-	LDRB r5, [r4, #0x51C]
-	ORR r5, r5, #0xF	; Enable Pin Digital for port D's 1111
-	AND r5, r5, #0xF
-	STRB r5, [r4, #0x51C]
-
-
-	; Port F
-	MOV r4, #0x5000
-	MOVT r4, #0x4002
-
-	; Pin Direction
-	LDRB r5, [r4, #0x400]
-	ORR r5, r5, #0xE	; Enable Pin Direction for port F's 0000 1110
-	AND r5, r5, #0xE
-	STRB r5, [r4, #0x400]
-
-	; Pin Digital
-	LDRB r5, [r4, #0x51C]
-	ORR r5, r5, #0x1E	; Enable Pin Digital for port F's 0001 1110
-	AND r5, r5, #0x1E
-	STRB r5, [r4, #0x51C]
-
-	; Pull-Up Resistor
-	LDRB r5, [r4, #0x510]
-	ORR r5, r5, #0x10	; Enable Pin Digital for port F's 0001 0000
-	AND r5, r5, #0x10
-	STRB r5, [r4, #0x510]
-
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
@@ -543,6 +591,89 @@ read_t_end:
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
+clear_txt:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r0, ptr_to_penalties_txt_space
+	BL output_string
+	MOV r5, #3
+clear_next_line:
+	LDR r0, ptr_to_game_board_Gray
+	BL output_string
+	MOV r4, #80
+clear_1_line_text:
+	MOV r0, #0x20
+	BL output_character
+	SUB r4, r4, #1
+	CMP r4, #0
+	BNE clear_1_line_text
+	MOV r0, #0x0A
+ 	Bl output_character
+	MOV r0, #0x0D
+ 	Bl output_character
+ 	SUB r5, r5, #1
+	CMP r5, #0
+	BNE clear_next_line
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+color_ball:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+	; get a number for ball
+	LDR r4, ptr_to_game_cursor_Line
+	LDRB r5, [r4]
+	LDR r4, ptr_to_game_cursor_Column
+	LDRB r6, [r4]
+	MUL r5, r5, r6
+	LDR r4, ptr_to_game_end_game_score
+	LDRB r6, [r4]
+	UDIV r5, r5, r6
+	LDR r4, ptr_to_game_timer_number
+	LDR r6, [r4]
+	MUL r5, r5, r6
+
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+color_p1:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+color_p2:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+print_ball:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+print_p1:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+print_p2:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+p1_win_RGB:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+p2_win_RGB:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
 
 	.end
 
