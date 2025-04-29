@@ -48,6 +48,14 @@
 	.global penalties_txt_p2
 	.global user1_win_round
 	.global user2_win_round
+	.global powerup_active
+	.global powerup_timer
+	.global powerup_spawn_timer
+	.global powerup_x
+	.global powerup_y
+	.global paddle1_powerup
+	.global paddle2_powerup
+
 
 prompt: .string "Your prompt with instructions is place here", 0
 game_pause_text: .string "The game is now paused...", 0
@@ -107,6 +115,16 @@ start_round: .byte 0x00			; 0 = round can not start
 								; 1 = round can now be start
 key_lock: .byte 0x01			; 1 = only space key will work
 								; 0 = wasd will work
+
+powerup_active:      .byte 0      ; 0 if no powerup active, 1 if active
+powerup_timer:       .byte 0      ; countdown timer for active powerup
+powerup_spawn_timer: .byte 0      ; countdown timer until next powerup spawns
+powerup_x:           .byte 0      ; x coordinate of powerup
+powerup_y:           .byte 0      ; y coordinate of powerup
+paddle1_powerup:     .byte 0      ; 1 = paddle 1 is powered up
+paddle2_powerup:     .byte 0      ; 1 = paddle 2 is powered up
+
+
 	.text
 
 	.global uart_init
@@ -185,6 +203,15 @@ ptr_to_penalties_txt_p1: .word penalties_txt_p1
 ptr_to_penalties_txt_p2: .word penalties_txt_p2
 ptr_to_user1_win_round: .word user1_win_round
 ptr_to_user2_win_round: .word user2_win_round
+
+ptr_to_powerup_active: .word powerup_active
+ptr_to_powerup_timer:  .word powerup_timer
+ptr_to_powerup_spawn_timer: .word powerup_spawn_timer
+ptr_to_powerup_size:      .word powerup_x
+ptr_to_paddle1_powerup: .word paddle1_powerup
+ptr_to_paddle2_powerup: .word paddle2_powerup
+ptr_to_powerup_x:		.word powerup_x
+ptr_to_powerup_y:		.word powerup_y
 
 
 lab7:				; This is your main routine which is called from your C wrapper.
@@ -380,7 +407,7 @@ p1_P_drawing:
 	SUB r5, r5, #1
 	CMP r5, #0
 	BNE p1_P_drawing
-	
+
 	; move to the head of player2 P
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -493,7 +520,7 @@ before_start:
 
 play_game:
 	LDR r5, ptr_to_round_winner
-	LDRB r5, [r5]	
+	LDRB r5, [r5]
 
 	CMP r5, #1
 	BEQ user1_win
@@ -516,7 +543,7 @@ user1_win:
 	LDR r1, ptr_to_start_round	; set start round to 0 so a new round only start wien user enter space on keyboard
 	MOV r2, #0
 	STRB r2, [r1]
-	
+
 	LDR r0, ptr_to_player1_score_place	; move to the place of player1's score
 	Bl output_string
 
@@ -533,13 +560,13 @@ user1_win:
 	LDR r0, ptr_to_num_place_hold
 	BL int2string
 	BL output_string
-	
+
 	; ball will move right and 0 up down
 	LDR r0, ptr_to_ball_up_down_speed
 	MOV r2, #0
 	STRB r2, [r0]
 
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #0
 	STRB r1, [r0]
 
@@ -602,13 +629,13 @@ user2_win:
 
 	LDR r0, ptr_to_player2_score_place	; move to the place of player2's score
 	Bl output_string
-	
+
 	LDR r0, ptr_to_game_board_Gray
 	BL output_string
 
 	LDR r0, ptr_to_text_White
 	BL output_string
-	
+
 	LDR r0, ptr_to_player2_number			; updated p2's score and print
 	LDRB r1, [r0]
 	ADD r1, r1, #1
@@ -616,13 +643,13 @@ user2_win:
 	LDR r0, ptr_to_num_place_hold
 	BL int2string
 	BL output_string
-	
+
 	; ball will move left and 0 up down
 	LDR r0, ptr_to_ball_up_down_speed
 	MOV r2, #0
 	STRB r2, [r0]
 
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #1
 	STRB r1, [r0]
 
@@ -890,7 +917,7 @@ intput_move_P:
 	BX lr
 
 is_w:
-	;see if plater 1 can move P	
+	;see if plater 1 can move P
 	LDR r0, ptr_to_ball_R_L
 	LDRB r1, [r0]
 	CMP r1, #0	;if r0 is 0 this means ball is moving to player2
@@ -899,8 +926,8 @@ is_w:
 	LDRB r0, [r0]
 	CMP r0, #5
 	BGT player1_loss_by_move_P
-	
-w_part2:	
+
+w_part2:
 	LDR r3, ptr_to_play1_head
 	LDRB r4, [r3]
 	CMP r4, #4
@@ -955,7 +982,7 @@ w_part2:
 	LDR r0, ptr_to_game_board_black
 	BL output_string
 
-	
+
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -966,7 +993,7 @@ w_part2:
 	BX lr
 
 is_a:
-	;see if plater 2 can move P	
+	;see if plater 2 can move P
 	LDR r0, ptr_to_ball_R_L
 	LDRB r0, [r0]
 	CMP r0, #1	;if r0 is 1 this means ball is moving to player1
@@ -1038,7 +1065,7 @@ a_part2:
 	LDR r0, ptr_to_game_board_black
 	BL output_string
 
-	
+
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1050,7 +1077,7 @@ a_part2:
 	BX lr
 
 is_s:
-	;see if plater 1 can move P	
+	;see if plater 1 can move P
 	LDR r0, ptr_to_ball_R_L
 	LDRB r0, [r0]
 	CMP r0, #0	;if r0 is 0 this means ball is moving to player2
@@ -1089,7 +1116,7 @@ s_part2:
 	BL output_character
 	MOV r0, #0x48			; 0x48 = H
 	BL output_character
-	
+
 	;make the head black
 	LDR r0, ptr_to_game_board_black
 	BL output_string
@@ -1134,7 +1161,7 @@ s_part2:
 	BX lr
 
 is_d:
-	;see if plater 2 can move P	
+	;see if plater 2 can move P
 	LDR r0, ptr_to_ball_R_L
 	LDRB r0, [r0]
 	CMP r0, #1	;if r0 is 1 this means ball is moving to player1
@@ -1175,7 +1202,7 @@ d_part2:
 	BL output_character
 	MOV r0, #0x48			; 0x48 = H
 	BL output_character
-	
+
 	;make the head black
 	LDR r0, ptr_to_game_board_black
 	BL output_string
@@ -1188,7 +1215,7 @@ d_part2:
 	BL output_character
 	MOV r0, #0x44
 	BL output_character
-	
+
 	; move down play2_p_size
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1230,7 +1257,7 @@ player1_loss_by_move_P:
 
 	LDR r4, ptr_to_round_winner	; set round_winner to 2 showing p2 wins
 	MOV r5, #2
-	STRB r5, [r4]	
+	STRB r5, [r4]
 
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1249,10 +1276,10 @@ player1_loss_by_move_P:
 
 	LDR r0, ptr_to_text_White
 	BL output_string
-	
+
 	LDR r0, ptr_to_player1_number			; updated p1's score and print
 	LDRB r1, [r0]
-	CMP r1, #0 
+	CMP r1, #0
 	IT GT
 	SUBGT r1, r1, #1
 	STRB r1, [r0]
@@ -1272,7 +1299,7 @@ player2_loss_by_move_P:
 
 	LDR r4, ptr_to_round_winner	; set round_winner to 1 showing p1 wins
 	MOV r5, #1
-	STRB r5, [r4]	
+	STRB r5, [r4]
 
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1291,10 +1318,10 @@ player2_loss_by_move_P:
 
 	LDR r0, ptr_to_text_White
 	BL output_string
-	
+
 	LDR r0, ptr_to_player2_number			; updated p2's score and print
 	LDRB r1, [r0]
-	CMP r1, #0 
+	CMP r1, #0
 	IT GT
 	SUBGT r1, r1, #1
 	STRB r1, [r0]
@@ -1320,7 +1347,7 @@ Timer_Handler:
 
 	LDR r1, ptr_to_FPS_now
 	LDRB r2, [r1]
-	
+
 	CMP r0, r2
 	BNE after_timer
 
@@ -1328,6 +1355,8 @@ Timer_Handler:
 	; reset FPS_now to 0
 	MOV r2, #0
 	STRB r2, [r1]
+
+	BL powerup_logic ;call powerup logic once per second after updating timer
 
 	; save the Cursor Position of the ball now
 	LDR r0, ptr_to_game_board_move
@@ -1354,7 +1383,7 @@ Timer_Handler:
 	LDR r0, ptr_to_num_place_hold
 	BL int2string
 	BL output_string
-	
+
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1450,7 +1479,7 @@ see_ball_move_RL:
 
 	; see if the ball will move to P's head
 	LDR r0, ptr_to_cursor_Line
-	LDRB r3, [r0]	
+	LDRB r3, [r0]
 	CMP r3, #2
 	BEQ ball_at_p1
 	CMP r3, #79
@@ -1465,7 +1494,7 @@ ball_at_p1:
 	LDRB r4, [r0]
 	CMP r3, r4			; ball at p's head, will move 1 up and left
 	BEQ ball_at_p1_head
-	
+
 	CMP r3, r4			; Ball move above P's heand p1 loss
 	BLT player1_loss_round_nom
 
@@ -1475,15 +1504,15 @@ ball_at_p1:
 	SUB r5, r5, #1
 	CMP r3, r5
 	BEQ ball_at_p1_tail		; ball at p's tail, will move 1 down and left
-	
+
 	CMP r3, r5			; Ball move below P's heand p1 loss
 	BGT player1_loss_round_nom
 
 	; at this point, the ball will hit the middle of P, so it just move right
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #0
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1510,10 +1539,10 @@ ball_at_p1:
 	B see_ball_move_RL_part2
 
 ball_at_p1_head:
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #0
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1543,7 +1572,7 @@ ball_at_p1_tail:
 	LDR r0, ptr_to_ball_R_L
 	MOV r1, #0
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1576,7 +1605,7 @@ ball_at_p2:
 	LDRB r4, [r0]
 	CMP r3, r4			; ball at p's head, will move 1 up and left
 	BEQ ball_at_p2_head
-	
+
 	CMP r3, r4			; Ball move above P's heand p2 loss
 	BLT player2_loss_round_nom
 
@@ -1586,15 +1615,15 @@ ball_at_p2:
 	SUB r5, r5, #1
 	CMP r3, r5
 	BEQ ball_at_p2_tail		; ball at p's tail, will move 1 down and left
-	
+
 	CMP r3, r5			; Ball move below P's heand p2 loss
 	BGT player2_loss_round_nom
 
 	; at this point, the ball will hit the middle of P, so it just move left
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #1
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1621,10 +1650,10 @@ ball_at_p2:
 	B see_ball_move_RL_part2
 
 ball_at_p2_head:
-	LDR r0, ptr_to_ball_R_L	
+	LDR r0, ptr_to_ball_R_L
 	MOV r1, #1
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1668,7 +1697,7 @@ ball_at_p2_tail:
 	LDR r0, ptr_to_ball_R_L
 	MOV r1, #1
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
@@ -1680,7 +1709,7 @@ ball_at_p2_tail:
 	LDR r0, ptr_to_ball_up_down_speed
 	MOV r1, #1
 	STRB r1, [r0]
-	
+
 	LDR r0, ptr_to_game_board_move
 	BL output_string
 
@@ -1706,7 +1735,7 @@ ball_at_p2_tail:
 	STRB r1, [r0]
 	STRB r3, [r2]
 	BL timer_interrupt_init
-	
+
 see_ball_move_RL_part2:
 	LDR r0, ptr_to_ball_R_L
 	LDRB r1, [r0]
@@ -1764,6 +1793,74 @@ ball_moving_done:
 	LDR r0, ptr_to_game_board_red
 	BL output_string
 
+	;new code check for powerup collision
+
+	LDR r0, ptr_to_powerup_active
+	LDRB r1, [r0]
+	CMP r1,#0
+	BNE no_powerup_collision ; powerup is active skip the check
+
+	;load the ball position
+	LDR r2, ptr_to_cursor_line
+	LDRB r3, [r2] ; ball y position
+	LDR r2, ptr_to_cursor_Column
+	LDRB r4, [r2] ; ball X position
+
+	;load powerup position
+	LDR r5, ptr_to_powerup_y
+	LDRB r6, [r5] ;power up y position
+	LDR r5, ptr_to_powerup_x
+	LDRB r7, [r5] ;powerup X position
+
+	;CMP Y cords
+	CMP r3,r6
+	BNE no_powerup_collision ;if not == then no collision
+
+	;CMP X cords
+	CMP r4, r7
+	BNE no_powerup_collision ;if not == then no collision
+
+	;ball collided set powerup active
+	LDR r0, ptr_to_powerup_active
+	MOV r1, #1
+	STRB r1,[r0]
+
+	;set powerup timer to 12
+	LDR r0, ptr_to_powerup_timer
+	MOV r1, #12
+	STRB r1,[r0]
+
+	;choose who gets powerup based on ball direction
+	LDR r0, ptr_to_ball_R_L
+	LDRB r1, [r0]
+	CMP r1, #0
+	BNE player2_gets_powerup ;if not moving right
+
+	; player 1 gets it
+	MOV r1, #8
+	LDR r0, ptr_to_play1_p_size
+	STRB r1, [r0]
+
+	MOV r1, #1
+	LDR r0, ptr_to_paddle1_powerup
+	STRB r1, [r0]
+	B after_powerup_collect
+
+player2_gets_powerup: ; player 2 gets power up
+	MOV r1, #8
+	LDR r0, ptr_to_play2_p_size
+	STRB r1, [r0]
+
+	MOV r1, #1
+	LDR r0, ptr_to_paddle2_powerup
+	STRB r1, [r0]
+
+after_powerup_collect:
+	;clear powerup from the board need to implement this in lab
+
+
+ 	;end new code
+no_powerup_collision:
 	;update FPS
 	LDR r0, ptr_to_FPS_now
 	LDRB r1, [r0]
@@ -1800,6 +1897,179 @@ player2_loss_round_nom:
 	STRB r5, [r4]
 	POP {r4-r12,lr}  	; Restore registers from stack
 	BX lr       	; Return
+
+
+
+powerup_logic:
+	PUSH {r4-r12, lr}
+
+	;if game is paused, skip powerup logic
+	LDR r0, ptr_to_pause
+    LDRB r1, [r0]
+    CMP r1, #1
+    BEQ exit_powerup
+
+	;check if powerup is active
+	LDR r0, ptr_to_powerup_active
+	LDRB r1, [r0]
+	CMP r1, #1
+	BNE check_spawn_timer ;if not active then check the spawn timer
+
+	;power up is active then decrement powerup_timer
+	LDR r0, ptr_to_powerup_timer
+	LDRB r1, [r0]
+	SUBS r1, r1, #1
+	STRB r1, [r0]
+
+	CMP r1, #0
+	BGT exit_powerup ; if still timer > 0 then your done
+
+	;powerup expired
+	;set powerup_active to 0
+	LDR r0, ptr_to_powerup_active
+	MOV r1, #0
+	STRB r1, [r0]
+
+	;Shrink Paddle
+check_p1_shrink:
+	LDR r0, ptr_to_paddle1_powerup
+    LDRB r1, [r0]
+    CMP r1, #1
+    BNE check_p2_shrink
+
+    ; Player 1 had powerup, reset size
+    MOV r1, #4
+    LDR r0, ptr_to_play1_p_size
+    STRB r1, [r0]
+
+    ; Clear Player 1 powerup flag
+    LDR r0, ptr_to_paddle1_powerup
+    MOV r1, #0
+    STRB r1, [r0]
+
+check_p2_shrink:
+	LDR r0, ptr_to_paddle2_powerup
+    LDRB r1, [r0]
+    CMP r1, #1
+    BNE exit_powerup
+
+    ; Player 2 had powerup, reset size
+    MOV r1, #4
+    LDR r0, ptr_to_play2_p_size
+    STRB r1, [r0]
+
+    ; Clear Player 2 powerup flag
+    LDR r0, ptr_to_paddle2_powerup
+    MOV r1, #0
+    STRB r1, [r0]
+
+    B exit_powerup
+
+
+check_spawn_timer:
+	;decrement the spawn timer
+	LDR r0, ptr_to_powerup_spawn_timer
+	LDRB r1,[r0]
+	SUBS r1, r1, #1
+	CMP r1,#0
+	BGT exit_powerup ; if spawn_timer > 0 dont spawn powerup
+
+	;spawn powerup
+	BL random_location ; set x and y coords for powerup
+
+	; Move to powerup location and draw it
+    LDR r0, ptr_to_game_board_move
+    BL output_string
+
+    ; Move to the row (powerup_y)
+    LDR r1, ptr_to_powerup_y
+    LDRB r2, [r1]
+    ADD r2, r2, #0x30
+    MOV r0, r2
+    BL output_character
+
+    ; Move to the column (powerup_x)
+    MOV r0, #0x3B
+    BL output_character
+
+    LDR r1, ptr_to_powerup_x
+    LDRB r2, [r1]
+    ADD r2, r2, #0x30
+    MOV r0, r2
+    BL output_character
+
+    MOV r0, #0x48    ; H
+    BL output_character
+
+    ; Draw the powerup
+    LDR r0, ptr_to_game_board_blue
+    BL output_string
+
+
+handle_active_powerup:
+	;update leds based off the powerup timer
+	LDR r0, ptr_to_powerup_timer
+	LDRB r1, [r0]
+
+	;turn on leds based off the timer
+	CMP r1,#12
+	BGE four_leds_on
+
+	CMP r1, #9
+	BGE three_leds_on
+
+	CMP r1, #6
+	BGE two_leds_on
+
+	CMP r1, #3
+	BGE one_led_on
+
+	;else turn off all leds
+zero_leds_on:
+	MOV r0, #0x0
+	BL illuminate_LEDs
+	Bx lr
+
+four_leds_on:
+	MOV r0, #0xF     ; all 4 LEDs on
+	BL illuminate_LEDs
+	BX lr
+
+three_leds_on:
+	MOV r0, #0x7     ; 3 LEDs
+	BL illuminate_LEDs
+	BX lr
+
+two_leds_on:
+	MOV r0, #0x3     ; 2 LEDs
+	BL illuminate_LEDs
+	BX lr
+
+one_led_on:
+	MOV r0, #0x1     ; 1 LED
+	BL illuminate_LEDs
+	BX lr
+
+
+deactive_powerup:
+
+exit_powerup:
+	POP {r4-r12, lr}
+	BX lr
+
+
+
+random_location: ; need to fully implement later ; implement this in lab
+	;for powerup choses a random location for it to spawn
+	;simple fake random just for now
+    LDR r0, ptr_to_powerup_x
+    MOV r1, #10     ; e.g., row 10
+    STRB r1, [r0]
+
+    LDR r0, ptr_to_powerup_y
+    MOV r1, #40     ; e.g., column 40
+    STRB r1, [r0]
+
 
 end_game:
 	.end
