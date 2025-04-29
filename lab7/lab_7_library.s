@@ -4,9 +4,9 @@
 	.global p1_color
 	.global p2_color
 
-ball_color: .byte	0x00
-p1_color: .byte	0x00
-p2_color: .byte	0x00
+ball_color: .byte	0x01
+p1_color: .byte	0x02
+p2_color: .byte	0x3
 
 	.text
 	.global uart_init
@@ -47,29 +47,41 @@ p2_color: .byte	0x00
 	.global player1_number
 	.global player2_number
 	.global timer_number
+	.global game_board_move
+	.global num_place_hold
+	.global play1_p_size
+	.global play2_p_size
+	.global see_sw2_5_push
+	.global LED_winner
+
 
 
 ptr_to_FPS_goal: .word FPS_goal
 ptr_to_penalties_txt_space: .word penalties_txt_space
 ptr_to_game_board_Gray: .word game_board_Gray
-ptr_to_game_cursor_Line: .word cursor_Line
-ptr_to_game_cursor_Column: .word cursor_Column
-ptr_to_game_end_game_score: .word end_game_score
-ptr_to_game_play1_head: .word play1_head
-ptr_to_game_play2_head: .word play2_head
-ptr_to_game_player1_number: .word player1_number
-ptr_to_game_player2_number: .word player2_number
-ptr_to_game_timer_number: .word timer_number
-
+ptr_to_cursor_Line: .word cursor_Line
+ptr_to_cursor_Column: .word cursor_Column
+ptr_to_end_game_score: .word end_game_score
+ptr_to_play1_head: .word play1_head
+ptr_to_play2_head: .word play2_head
+ptr_to_player1_number: .word player1_number
+ptr_to_player2_number: .word player2_number
+ptr_to_timer_number: .word timer_number
+ptr_to_board_move: .word game_board_move
+ptr_to_play1_p_size: .word play1_p_size
+ptr_to_play2_p_size: .word play2_p_size
+ptr_to_num_place_hold: .word num_place_hold
 ptr_to_ball_color: .word ball_color
 ptr_to_p1_color: .word p1_color
 ptr_to_p2_color: .word p2_color
+ptr_to_see_sw2_5_push: .word see_sw2_5_push
+
 U0FR: 	.equ 0x18	; UART0 Flag Register
 
 gpio_btn_and_LED_init:
 	PUSH {r4-r12,lr}	; Spill registers to stack
 
-          ; Your code is placed here
+    ; Your code is placed here
 	; Enable Clock for B, D, and F
 	MOV r4, #0xE608
 	MOVT r4, #0x400F
@@ -227,7 +239,7 @@ timer_interrupt_init:
 	STRB r7, [r3, #0x004]
 
 	;setting timer interrupt interval period
-	MOV r0, #0x2400			; add this to lab7_L
+	MOV r0, #0x2400		
 	MOVT r0, #0xF4
 	LDR r1, ptr_to_FPS_goal
 	LDRB r1, [r1]
@@ -281,7 +293,7 @@ gpio_interrupt_init:
 	; Don't forget to follow the procedure you followed in Lab #4
 	; to initialize SW1.
 	PUSH {r4-r12,lr}	; Spill registers to stack
-
+	; port F
 	MOV r4, #0x5000
 	MOVT r4, #0x4002
 	MOV r5, #0
@@ -484,6 +496,7 @@ read_from_push_btns:
 	AND r6, r5, #0xF	; AND with 1111
 	MOV r0, r6
 
+
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
@@ -618,36 +631,191 @@ clear_1_line_text:
 
 color_ball:
 	PUSH {r4-r12,lr}	; Spill registers to stack
-	; get a number for ball
-	LDR r4, ptr_to_game_cursor_Line
+						; get a number for ball
+	LDR r4, ptr_to_end_game_score
 	LDRB r5, [r4]
-	LDR r4, ptr_to_game_cursor_Column
+	MOV r6, #31
+	MUL r5, r5, r6				;  r5 = end game score *31
+	LDR r4, ptr_to_ball_color
 	LDRB r6, [r4]
-	MUL r5, r5, r6
-	LDR r4, ptr_to_game_end_game_score
-	LDRB r6, [r4]
-	UDIV r5, r5, r6
-	LDR r4, ptr_to_game_timer_number
+	ADD r6, #13
+	UDIV r5, r5, r6				;  r5 = r5 / (ball color+13)
+	LDR r4, ptr_to_timer_number
 	LDR r6, [r4]
-	MUL r5, r5, r6
+	MUL r5, r5, r6				; r5 = r5 * timer
+	MOV r6, #13
+	MUL r5, r5, r6				; r5 = r5 *13
 
+	MOV r7, #6
+	UDIV r6, r5, r7
+	MUL r6, r6, r7
+	SUB r5, r5, r6		; should be from 0 to 5
+	
+	LDR r4, ptr_to_ball_color		; see if the color is the same as before
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	STRB r5, [r4]
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
 color_p1:
 	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r4, ptr_to_play1_head
+	LDRB r5, [r4]
+	LDR r4, ptr_to_cursor_Column
+	LDRB r6, [r4]
+	MUL r5, r5, r6				; r5 = game_play1_head * column
+	LDR r4, ptr_to_end_game_score
+	LDRB r6, [r4]
+	MUL r5, r5, r6				;  r5 = r5 * end game score
+	LDR r4, ptr_to_p1_color
+	LDRB r6, [r4]
+	UDIV r5, r5, r6				;  r5 = r5 / p1 color
+	LDR r4, ptr_to_timer_number
+	LDR r6, [r4]
+	MUL r5, r5, r6				; r5 = r5 * timer
+	LDR r4, ptr_to_player1_number
+	LDR r6, [r4]
+	ADD r5, r5, r6				;r5 = r5 + p1's score
+	MOV r6, #23
+	MUL r5, r5, r6				; r5 = r5 * 23
+
+	MOV r7, #6
+	UDIV r6, r5, r7
+	MUL r6, r6, r7
+	SUB r5, r5, r6		; should be from 0 to 5
+	
+	LDR r4, ptr_to_p1_color			; see if the color is the same as before
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_ball_color	; get the ball's color
+	LDRB r4, [r4]				; if the color is same as ball
+	CMP r5, r4					; change the color
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_p1_color			; see if the color is the same as before
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_p1_color
+	STRB r5, [r4]
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 color_p2:
 	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r4, ptr_to_play2_head
+	LDRB r5, [r4]
+	LDR r4, ptr_to_cursor_Column
+	LDRB r6, [r4]
+	MUL r5, r5, r6				; r5 = game_play2_head * column
+	LDR r4, ptr_to_end_game_score
+	LDRB r6, [r4]
+	MUL r5, r5, r6				;  r5 = r5 * end game score
+	LDR r4, ptr_to_p2_color
+	LDRB r6, [r4]
+	UDIV r5, r5, r6				;  r5 = r5 / p2 color
+	LDR r4, ptr_to_timer_number
+	LDR r6, [r4]
+	MUL r5, r5, r6				; r5 = r5 * timer
+	LDR r4, ptr_to_player2_number
+	LDR r6, [r4]
+	ADD r5, r5, r6				;r5 = r5 + p2's score
+	MOV r6, #73
+	MUL r5, r5, r6				; r5 = r5 * 73
+
+	MOV r7, #6
+	UDIV r6, r5, r7
+	MUL r6, r6, r7
+	SUB r5, r5, r6		; should be from 0 to 5
+
+	LDR r4, ptr_to_p2_color			; see if the color is the same as before
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_ball_color	; get the ball's color
+	LDRB r4, [r4]				; if the color is same as ball
+	CMP r5, r4					; change the color
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_p1_color			; see if the color is the same p1
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_p2_color			; see if the color is the same as before
+	LDRB r7, [r4]					; if yes, change a color
+	CMP r7, r5
+	IT EQ
+	ADDEQ r5, r5, #1
+	CMP r5, #6
+	IT EQ
+	MOVEQ r5, #0
+
+	LDR r4, ptr_to_p2_color
+	STRB r5, [r4]
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
 print_ball:
 	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r0, ptr_to_board_move
+	BL output_string
+	
+	MOV r0, #0x34		; output 4
+	BL output_character
+
+	LDR r4, ptr_to_ball_color
+	LDRB r4, [r4]
+
+	CMP r4, #0
+	IT EQ
+	MOVEQ r4, #0x07		; make r4 equal to 7 if it is 0
+
+	ADD r0, r4, #0x30
+	BL output_character
+
+	MOV r0, #0x6D		; output m
+	BL output_character
+
+	MOV r0, #0x20		; output space
+	BL output_character
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
@@ -655,23 +823,273 @@ print_ball:
 print_p1:
 	PUSH {r4-r12,lr}	; Spill registers to stack
 
+	; move to the head of player1 P
+	LDR r0, ptr_to_board_move
+	BL output_string
+
+	LDR r0, ptr_to_num_place_hold
+	LDR r1, ptr_to_play1_head
+	LDRB r1, [r1]
+	BL int2string
+	BL output_string
+
+	MOV r0, #0x3B			; 0x3b = ;
+	BL output_character
+	MOV r0, #0x31			; 0x31 = 1
+	BL output_character
+	MOV r0, #0x48			; 0x48 = H
+	BL output_character
+	LDR r4, ptr_to_play1_p_size
+	LDRB r5, [r4]
+p1_P_drawing:
+	; draw the new head
+	LDR r0, ptr_to_board_move
+	BL output_string
+	
+	MOV r0, #0x34
+	BL output_character
+
+	LDR r4, ptr_to_p1_color
+	LDRB r4, [r4]
+
+	CMP r4, #0
+	IT EQ
+	MOVEQ r4, #0x07		; make r4 equal to 7 if it is 0
+
+	ADD r0, r4, #0x30
+	BL output_character
+
+	MOV r0, #0x6D		; output m
+	BL output_character
+	MOV r0, #0x20		; output space
+	BL output_character
+
+	MOV r0, #0x0D
+ 	BL output_character
+ 	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE p1_P_drawing
+
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
 print_p2:
 	PUSH {r4-r12,lr}	; Spill registers to stack
 
+	; move to the head of player2 P
+	LDR r0, ptr_to_board_move
+	BL output_string
+
+	LDR r0, ptr_to_num_place_hold
+	LDR r1, ptr_to_play2_head
+	LDRB r1, [r1]
+	BL int2string
+	BL output_string
+
+	MOV r0, #0x3B			; 0x3b = ;
+	BL output_character
+	MOV r0, #0x38			; 0x38 = 8
+	BL output_character
+	MOV r0, #0x30			; 0x30 = 0
+	BL output_character
+	MOV r0, #0x48			; 0x48 = H
+	BL output_character
+
+	LDR r4, ptr_to_play2_p_size
+	LDRB r5, [r4]
+p2_P_drawing:
+	; draw the new head
+	LDR r0, ptr_to_board_move
+	BL output_string
+
+	MOV r0, #0x34
+	BL output_character
+
+	LDR r4, ptr_to_p2_color
+	LDRB r4, [r4]
+
+	CMP r4, #0
+	IT EQ
+	MOVEQ r4, #0x07		; make r4 equal to 7 if it is 0
+
+	ADD r0, r4, #0x30
+	BL output_character
+
+	MOV r0, #0x6D		; output m
+	BL output_character
+	MOV r0, #0x20		; output space
+	BL output_character
+
+ 	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	 LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE p2_P_drawing
+
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 
 p1_win_RGB:
 	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r4, ptr_to_p1_color
+	LDRB r4, [r4]
+
+	CMP r4, #1		; light up red
+	IT EQ
+	MOVEQ r6, #2	; 0000 0010
+	BEQ store_p1_RGB
+
+	CMP r4, #2		; light up green
+	IT EQ
+	MOVEQ r6, #8	; 0000 1000
+	BEQ store_p1_RGB
+
+	CMP r4, #3		; light up yellow
+	IT EQ
+	MOVEQ r6, #10	; 0000 1010
+	BEQ store_p1_RGB
+
+	CMP r4, #4		; light up blue
+	IT EQ
+	MOVEQ r6, #4	; 0000 0100
+	BEQ store_p1_RGB
+
+	CMP r4, #5		; light up purple
+	IT EQ
+	MOVEQ r6, #6	; 0000 0110
+	BEQ store_p1_RGB
+
+	CMP r4, #0		; light up white
+	IT EQ
+	MOVEQ r6, #14	; 0000 1110
+	BEQ store_p1_RGB
+
+store_p1_RGB:
+	MOV r5, #0x53FC
+	MOVT r5, #0x4002
+	STRB r6, [r5]
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
+
 p2_win_RGB:
 	PUSH {r4-r12,lr}	; Spill registers to stack
+	LDR r4, ptr_to_p2_color
+	LDRB r4, [r4]
 
+	CMP r4, #1		; light up red
+	IT EQ
+	MOVEQ r6, #2	; 0000 0010
+	BEQ store_p2_RGB
+
+	CMP r4, #2		; light up green
+	IT EQ
+	MOVEQ r6, #8	; 0000 1000
+	BEQ store_p2_RGB
+
+	CMP r4, #3		; light up yellow
+	IT EQ
+	MOVEQ r6, #10	; 0000 1010
+	BEQ store_p2_RGB
+
+	CMP r4, #4		; light up blue
+	IT EQ
+	MOVEQ r6, #4	; 0000 0100
+	BEQ store_p2_RGB
+
+	CMP r4, #5		; light up purple
+	IT EQ
+	MOVEQ r6, #6	; 0000 0110
+	BEQ store_p2_RGB
+
+	CMP r4, #0		; light up white
+	IT EQ
+	MOVEQ r6, #14	; 0000 1110
+	BEQ store_p2_RGB
+
+store_p2_RGB:
+	MOV r5, #0x53FC
+	MOVT r5, #0x4002
+	STRB r6, [r5]
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	MOV pc, lr
+
+LED_winner:
+	PUSH {r4-r12,lr}	; Spill registers to stack
+	MOV r3, #0x53FC		;port B
+	MOVT r3, #0x4000
+
+	MOV r4, #1	; 0001
+	STRB r4, [r3]
+
+	MOV r5, #0x2400
+	MOVT r5, #0x24
+keep_1_on:
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE keep_1_on
+
+	MOV r4, #2	; 0010
+	STRB r4, [r3]
+
+	MOV r5, #0x2400
+	MOVT r5, #0x24
+keep_2_on:
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE keep_2_on
+
+	MOV r4, #4	; 0100
+	STRB r4, [r3]
+
+	MOV r5, #0x2400
+	MOVT r5, #0x24
+keep_3_on:
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE keep_3_on
+
+	MOV r4, #8	; 1000
+	STRB r4, [r3]
+
+	MOV r5, #0x2400
+	MOVT r5, #0x24
+keep_4_on:
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE keep_4_on
+
+	MOV r4, #15	; 1111
+	STRB r4, [r3]
+
+	MOV r5, #0x2400
+	MOVT r5, #0x24
+keep_all_on:
+	SUB r5, r5, #1
+	CMP r5, #0
+	BNE keep_all_on
+
+	MOV r4, #0	; 0000
+	STRB r4, [r3]
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
 

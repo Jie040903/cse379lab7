@@ -38,7 +38,6 @@
 	.global num_place_hold
 	.global FPS_goal
 	.global FPS_now
-	.global start_round
 	.global key_lock
 	.global round_winner
 	.global FPS_LV
@@ -48,16 +47,18 @@
 	.global penalties_txt_p2
 	.global user1_win_round
 	.global user2_win_round
+	.global see_sw2_5_push
 
-prompt: .string "Your prompt with instructions is place here", 0
+prompt: .string "To start the game push space on the keyboard", 0
 game_pause_text: .string "The game is now paused...", 0
-user1_win_string: .string "Player 1 won this game!!!",0
-user2_win_string: .string "Player 2 won this game!!!",0
+user1_win_string: .string "Player 1 won this game!!!", 0xa, 0xd
+keep_play_or_end: .string "Push 1 to start a new game or 2 to end the game", 0
+user2_win_string: .string "Player 2 won this game!!!", 0
+keep_play_or_end_2: .string "Push 1 to start a new game or 2 to end the game", 0
 user1_win_round: .string "Player 1 won this round of the game, push space to start the next round.",0
 user2_win_round: .string "Player 2 won this round of the game, push space to start the next round.",0
 penalties_txt_p1: .string  "A penalty occurs for player 1.",0
 penalties_txt_p2: .string  "A penalty occurs for player 2.",0
-keep_play_or_end: .string "Push 1 to keep playing or 2 to end the game", 0
 text_space: .string 27, "[32;1H", 0
 penalties_txt_space: .string 27, "[31;1H", 0
 game_board_Gray: .string 27, "[100m ", 0
@@ -79,12 +80,13 @@ player2_score_place: .string 27, "[2;74H", 0
 timer_place: .string 27, "[2;32H", 0
 timer_text: .string "Time: ", 0
 num_place_hold: .string "a placeholder for int to string", 0
+see_sw2_5_push: .string "push a button from sw2 to sw 5 to set the end game score", 0
 timer_number: .word 0x00000000
 
 end_game_score: .byte	0x05		; the score the user want to end the game
 pause:	.byte	0x00				; 0x21 = see if game is pause, if it 1, 0 it not
-play_or_end: .byte 0x24				; 1 = keep playing, 2 = end the game, 0 = player can not update this right now because game is not end, 3 = now player can choose 1 or 2
-mydata: .byte 0x25					; w,s or up down
+play_or_end: .byte 0x24				; 1 = keep playing, 2 = end the game, 0 = no input
+mydata: .byte 0x25					; w,s or o, l
 cursor_Line: .byte 0x01				; the line cursor is at
 cursor_Column: .byte 0x01			; the Column cursor is at
 play1_p_size: .byte 0x04			; the size of player1 penalties size
@@ -103,10 +105,10 @@ ball_R_L_speed: .byte 0x01		; the amount of space the ball move right or left
 FPS_goal: .byte 0x1E			; start with 30
 FPS_now: .byte 0x00
 FPS_LV: .byte 0x01				; 1=30, 2=35, 3=40, 4=45, 5=50, 6=55, 7=60
-start_round: .byte 0x00			; 0 = round can not start
-								; 1 = round can now be start
-key_lock: .byte 0x01			; 1 = only space key will work
-								; 0 = wasd will work
+key_lock: .byte 0x00			; 0 = only space key will work
+					; 1 = wasd will work
+					; 2 = 1 and 2 will work
+
 	.text
 
 	.global uart_init
@@ -137,6 +139,7 @@ key_lock: .byte 0x01			; 1 = only space key will work
 	.global print_p2
 	.global p1_win_RGB
 	.global p2_win_RGB
+	.global LED_winner
 
 ptr_to_prompt:		.word prompt
 ptr_to_pause:		.word pause
@@ -176,7 +179,6 @@ ptr_to_num_place_hold: .word num_place_hold
 ptr_to_FPS_goal: .word FPS_goal
 ptr_to_FPS_now: .word FPS_now
 ptr_to_FPS_LV: .word FPS_LV
-ptr_to_start_round: .word start_round
 ptr_to_key_lock: .word key_lock
 ptr_to_round_winner: .word round_winner
 ptr_to_text_space: .word text_space
@@ -185,6 +187,7 @@ ptr_to_penalties_txt_p1: .word penalties_txt_p1
 ptr_to_penalties_txt_p2: .word penalties_txt_p2
 ptr_to_user1_win_round: .word user1_win_round
 ptr_to_user2_win_round: .word user2_win_round
+ptr_to_see_sw2_5_push: .word see_sw2_5_push
 
 
 lab7:				; This is your main routine which is called from your C wrapper.
@@ -305,7 +308,7 @@ black_down_loop:
 	LDR r0, ptr_to_cursor_Column
  	LDRB r2, [r0]
 
-	CMP r2, #24
+	CMP r2, #26
 	BEQ White2
 
 	B white_done
@@ -347,82 +350,6 @@ White2_part2:
 	B White2_part2
 
 playerP:
-	; move to the head of player1 P
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-
-	LDR r0, ptr_to_num_place_hold
-	LDR r1, ptr_to_play1_head
-	LDRB r1, [r1]
-	BL int2string
-	BL output_string
-
-	MOV r0, #0x3B			; 0x3b = ;
-	BL output_character
-	MOV r0, #0x31			; 0x31 = 1
-	BL output_character
-	MOV r0, #0x48			; 0x48 = H
-	BL output_character
-	LDR r4, ptr_to_play1_p_size
-	LDRB r5, [r4]
-p1_P_drawing:
-	; draw the new head
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-	MOV r0, #0x0D
- 	BL output_character
- 	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x42
-	BL output_character
-	SUB r5, r5, #1
-	CMP r5, #0
-	BNE p1_P_drawing
-	
-	; move to the head of player2 P
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-
-	LDR r0, ptr_to_num_place_hold
-	LDR r1, ptr_to_play2_head
-	LDRB r1, [r1]
-	BL int2string
-	BL output_string
-
-	MOV r0, #0x3B			; 0x3b = ;
-	BL output_character
-	MOV r0, #0x38			; 0x38 = 8
-	BL output_character
-	MOV r0, #0x30			; 0x30 = 0
-	BL output_character
-	MOV r0, #0x48			; 0x48 = H
-	BL output_character
-	LDR r4, ptr_to_play1_p_size
-	LDRB r5, [r4]
-
-p2_P_drawing:
-	; draw the new head
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x44
-	BL output_character
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x42
-	BL output_character
-	SUB r5, r5, #1
-	CMP r5, #0
-	BNE p2_P_drawing
-
-draw_ball:
 	LDR r0, ptr_to_player1_score_place
 	BL output_string
 
@@ -459,20 +386,82 @@ draw_ball:
 	BL int2string
 	BL output_string
 
+	LDR r0, ptr_to_text_space
+	BL output_string
+	LDR r0, ptr_to_see_sw2_5_push
+	BL output_string
+
+wait_for_sw2_5:
+	BL read_from_push_btns
+
+	CMP r0, #1
+	BEQ SW5_push
+
+	CMP r0, #2
+	BEQ SW4_push
+
+	CMP r0, #4
+	BEQ SW3_push
+
+	CMP r0, #8
+	BEQ SW2_push
+	B wait_for_sw2_5
+SW2_push:
+	LDR r4, ptr_to_end_game_score
+	MOV r5, #0xFF
+	STRB r5, [r4]
+	B sw2_5_pushed
+SW3_push:
+	LDR r4, ptr_to_end_game_score
+	MOV r5, #11
+	STRB r5, [r4]
+	B sw2_5_pushed
+SW4_push:
+	LDR r4, ptr_to_end_game_score
+	MOV r5, #9
+	STRB r5, [r4]
+	B sw2_5_pushed
+SW5_push:
+	LDR r4, ptr_to_end_game_score
+	MOV r5, #7
+	STRB r5, [r4]
+sw2_5_pushed:
+	BL clear_txt
+	LDR r0, ptr_to_text_space
+	BL output_string
+	LDR r0, ptr_to_prompt
+	BL output_string
+
 before_start:
-	LDR r1, ptr_to_start_round
-	LDRB r2, [r1]
-	CMP r2, #0
-	BEQ before_start
+	LDR r1, ptr_to_key_lock
 	MOV r2, #0
 	STRB r2, [r1]
+
+	LDR r1, ptr_to_play_or_end
+	STRB r2, [r1]
+
+
+wait_for_SP:
+	LDR r1, ptr_to_key_lock		; if key lock is 0, keep waiting
+	LDRB r2, [r1]
+	CMP r2, #0
+	BEQ wait_for_SP
+
 	BL clear_txt
+
+	BL color_ball
+
+	BL color_p1
+	BL print_p1
+
+	BL color_p2
+	BL print_p2
+
 
 	LDR r0, ptr_to_ball_start_place
 	BL output_string
 
-	LDR r0, ptr_to_game_board_red			; draw the ball and set the line and column
-	BL output_string
+	BL print_ball
 
 	LDR r0, ptr_to_cursor_Column
  	MOV r2, #15
@@ -489,6 +478,7 @@ before_start:
 	MOV r3, #30
 	STRB r1, [r0]
 	STRB r3, [r2]
+
 	BL timer_interrupt_init
 
 play_game:
@@ -501,6 +491,13 @@ play_game:
 	CMP r5, #2
 	BEQ user2_win
 
+	LDR r0, ptr_to_play_or_end
+	LDRB r0, [r0]
+	CMP r0, #1
+	BEQ lab7
+	CMP r0, #2
+	BEQ end_game
+
 	B play_game
 
 
@@ -510,10 +507,6 @@ user1_win:
 	STRB r6, [r5]
 
 	LDR r1,ptr_to_key_lock		;set key lock to 1 so only space can work on keyboard
-	MOV r2, #1
-	STRB r2, [r1]
-
-	LDR r1, ptr_to_start_round	; set start round to 0 so a new round only start wien user enter space on keyboard
 	MOV r2, #0
 	STRB r2, [r1]
 	
@@ -551,18 +544,28 @@ user1_win:
 	LDRB r1, [r0]
 	LDR r0, ptr_to_end_game_score
 	LDRB r2, [r0]
+
 	;showing user the round winning text
 	; move to the place to show user text
 	LDR r0, ptr_to_text_space
 	BL output_string
 
+	MOV r0, #0xa
+	BL output_character
+	MOV r0, #0xd
+	BL output_character
+
 	LDR r0, ptr_to_user1_win_round
 	BL output_string
+
+	BL p1_win_RGB			;light the RGB
 
 	CMP r1, r2
 	BNE before_start
 
-	LDR r0, ptr_to_text_space
+	BL clear_txt
+
+	LDR r0, ptr_to_text_space		; show p1 winning text
 	BL output_string
 	LDR r0, ptr_to_user1_win_string
 	BL output_string
@@ -570,13 +573,9 @@ user1_win:
 	BL output_character
 	MOV r0, #0xD
 	BL output_character
-	LDR r0, ptr_to_keep_play_or_end
-	BL output_string
-	LDR r0, ptr_to_play_or_end
-	MOV r1, #3
-	STRB r1, [r0]
-	LDR r1,ptr_to_key_lock		;set key lock to 0
-	MOV r2, #0
+
+	LDR r1,ptr_to_key_lock		;set key lock to 2 so only 1 and 2 can work on keyboard
+	MOV r2, #2
 	STRB r2, [r1]
 play1_wait:
 	LDR r0, ptr_to_play_or_end
@@ -585,6 +584,7 @@ play1_wait:
 	BEQ lab7
 	CMP r0, #2
 	BEQ end_game
+	BL LED_winner
 	B play1_wait
 
 user2_win:
@@ -592,11 +592,7 @@ user2_win:
 	MOV r6, #0
 	STRB r6, [r5]
 
-	LDR r1,ptr_to_key_lock		;set key lock to 1 so only space can work on keyboard
-	MOV r2, #1
-	STRB r2, [r1]
-
-	LDR r1, ptr_to_start_round	; set start round to 0 so a new round only start when user enter space on keyboard
+	LDR r1,ptr_to_key_lock		;set key lock to 0 so only space can work on keyboard
 	MOV r2, #0
 	STRB r2, [r1]
 
@@ -639,13 +635,22 @@ user2_win:
 	LDR r0, ptr_to_text_space
 	BL output_string
 
+	MOV r0, #0xa
+	BL output_character
+	MOV r0, #0xd
+	BL output_character
+
 	LDR r0, ptr_to_user2_win_round
 	BL output_string
+
+	BL p2_win_RGB		;light the RGB
 
 	CMP r1, r2
 	BNE before_start
 
-	LDR r0, ptr_to_text_space
+	BL clear_txt
+
+	LDR r0, ptr_to_text_space		; show p1 winning text
 	BL output_string
 	LDR r0, ptr_to_user2_win_string
 	BL output_string
@@ -653,13 +658,9 @@ user2_win:
 	BL output_character
 	MOV r0, #0xD
 	BL output_character
-	LDR r0, ptr_to_keep_play_or_end
-	BL output_string
-	LDR r0, ptr_to_play_or_end
-	MOV r1, #3
-	STRB r1, [r0]
-	LDR r1,ptr_to_key_lock		;set key lock to 0
-	MOV r2, #0
+
+	LDR r1,ptr_to_key_lock		;set key lock to 2 so only 1 and 2 can work on keyboard
+	MOV r2, #2
 	STRB r2, [r1]
 play2_wait:
 	LDR r0, ptr_to_play_or_end
@@ -668,6 +669,8 @@ play2_wait:
 	BEQ lab7
 	CMP r0, #2
 	BEQ end_game
+
+	BL LED_winner
 	B play2_wait
 
 Switch_Handler:
@@ -684,52 +687,9 @@ Switch_Handler:
 	MOV r5, #0x53FC 	; to access port F, mask bits
 	MOVT r5, #0x4002
 	LDRB r4, [r5]		; r4 is 0001 0000 if sw1 is push
+	AND r4, #16
 	CMP r4, #16
 	BEQ game_pause
-
-	MOV r5, #0x73FC
-	MOVT r5, #0x4000
-	LDRB r4, [r5]
-	CMP r4, #1			; 0001 = sw5 is push
-	BEQ sw5
-	CMP r4, #2			; 0010 = sw4 is push
-	BEQ sw4
-	CMP r4, #4			; 0100 = sw3 is push
-	BEQ sw3
-	CMP r4, #8			; 1000 = sw2 is push
-	BEQ sw2
-
-sw2:
-	;save a FF in end_game_score
-	LDR r4, ptr_to_end_game_score
-	MOV r5, #0xFF
-	STRB r5, [r4]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
-
-sw3:
-	;save a 11 in end_game_score
-	LDR r4, ptr_to_end_game_score
-	MOV r5, #11
-	STRB r5, [r4]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
-
-sw4:
-	;save a 9 in end_game_score
-	LDR r4, ptr_to_end_game_score
-	MOV r5, #9
-	STRB r5, [r4]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
-
-sw5:
-	;save a 7 in end_game_score
-	LDR r4, ptr_to_end_game_score
-	MOV r5, #7
-	STRB r5, [r4]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
 
 game_pause:
 	LDR r4, ptr_to_pause
@@ -745,18 +705,8 @@ game_pause:
 	BL output_string
 	MOV r0, #0x73
 	BL output_character
-	; move to the place to show user text
-	LDR r0, ptr_to_text_space
-	BL output_string
-	LDR r0, ptr_to_game_board_Gray
-	BL output_string
-	MOV r4, #24
-clear_pause_text:
-	MOV r0, #0x20
-	BL output_character
-	SUB r4, r4, #1
-	CMP r4, #0
-	BNE clear_pause_text
+
+	BL clear_txt
 
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
@@ -764,7 +714,11 @@ clear_pause_text:
 	MOV r0, #0x75
 	BL output_character
 
-	bl timer_interrupt_init	; start the timer interrupt again
+	LDR r1,ptr_to_key_lock		;set key lock to 1
+	MOV r2, #1
+	STRB r2, [r1]
+
+	bl timer_interrupt_init		; start the timer interrupt again
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	BX lr       	; Return
@@ -790,6 +744,12 @@ game_not_pause:
 	LDR r0, ptr_to_text_space
 	BL output_string
 
+	LDR r0, ptr_to_game_board_Gray
+	BL output_string
+
+	LDR r0, ptr_to_text_White
+	BL output_string
+
 	LDR r0, ptr_to_game_pause_text
 	BL output_string
 
@@ -799,8 +759,13 @@ game_not_pause:
 	MOV r0, #0x75
 	BL output_character
 
+	LDR r1,ptr_to_key_lock		;set key lock to 2
+	MOV r2, #2
+	STRB r2, [r1]
+
 	POP {r4-r12,lr}  	; Restore registers from stack
 	BX lr       	; Return
+
 UART0_Handler:
 	; Your code for your UART handler goes here.
 	; Remember to preserver registers r4-r12 by pushing then popping
@@ -821,69 +786,64 @@ UART0_Handler:
 
 	LDR r1,ptr_to_key_lock
 	LDRB r2, [r1]
+	
+	CMP r2, #0
+	BEQ intput_sp
+
+	CMP r2, #2
+	BEQ intput_1_2
+	
 	CMP r2, #1
-	BNE see_1_2
-	MOV r2, #0
-	STRB r2, [r1]
-	CMP r0, #0x20
-	BNE see_key_lock
-	LDR r1, ptr_to_start_round
-	MOV r2, #1
-	STRB r2, [r1]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
-see_key_lock:
-	LDR r1,ptr_to_key_lock
-	MOV r2, #1
+	BEQ intput_move_P
+
+intput_sp:
+	CMP r0, #0x20		; see if input is space
+	IT EQ
+	MOVEQ r2, #1		; set key lock to 1
 	STRB r2, [r1]
 
 	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
+	BX lr
 
-see_1_2:
-	LDR r1, ptr_to_play_or_end
-	LDRB r2, [r1]
-	CMP r2, #3
-	BNE intput_move_P
-
-	CMP r0, #0x31
+intput_1_2:
+	LDR r4, ptr_to_play_or_end
+	CMP r0, #0x31		; see if input is 1
 	BNE not_1
-	LDR r0, ptr_to_play_or_end
-	MOV r1, #1
-	STRB r1, [r0]
+
+	MOV r5, #1		; set keep_play_or_end to 1
+	STRB r5, [r4]
+
+	POP {r4-r12,lr}  	; Restore registers from stack
+	BX lr
 
 not_1:
-	CMP r0, #0x32
+	CMP r0, #0x32		; see if input is 2
 	BNE not_2
-	LDR r0, ptr_to_play_or_end
-	MOV r1, #2
-	STRB r1, [r0]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
+
+	MOV r5, #2		; set keep_play_or_end to 2
+	STRB r5, [r4]
+
 not_2:
-	LDR r1, ptr_to_start_round
-	MOV r2, #1
-	STRB r2, [r1]
-	POP {r4-r12,lr}  	; Restore registers from stack
-	BX lr       	; Return
+	POP {r4-r12,lr}  	; do nothing if input is not 1 or 2
+	BX lr
 
 intput_move_P:
-	LDR r1,ptr_to_key_lock
-	LDRB r2, [r1]
-	CMP r2, #1
-	BEQ P_move_end
+	;LDR r1,ptr_to_key_lock
+	;LDRB r2, [r1]
+	;CMP r2, #1
+	;BEQ P_move_end
 
 	CMP r0, #0x77		; see if enter is "w" player 1 move up
 	BEQ is_w
 
-	CMP r0, #0x61		; see if enter is "a" player 2 move up
-	BEQ is_a
+	CMP r0, #0x6F		; see if enter is "o" player 2 move up
+	BEQ is_o
 
 	CMP r0, #0x73		; see if enter is "s" player 1 move down
 	BEQ is_s
 
-	CMP r0, #0x64		; see if enter is "d" player 2 move down
-	BEQ is_d
+	CMP r0, #0x6C		; see if enter is "l" player 2 move down
+	BEQ is_l
 
 	; if input is not wasd, do nothing
 	POP {r4-r12,lr}  	; Restore registers from stack
@@ -916,45 +876,10 @@ w_part2:
 	MOV r0, #0x73
 	BL output_character
 
-	; draw the new P
-	; move to the head of player1 P
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-
-	LDR r0, ptr_to_num_place_hold
-	LDR r1, ptr_to_play1_head
-	LDRB r1, [r1]
-	BL int2string
-	BL output_string
-
-	MOV r0, #0x3B			; 0x3b = ;
-	BL output_character
-	MOV r0, #0x31			; 0x31 = 1
-	BL output_character
-	MOV r0, #0x48			; 0x48 = H
-	BL output_character
-
-	; draw the new head
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-
-	MOV r0, #0x0D
- 	BL output_character
-
-	; move to the tail of the P and make it black
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	LDR r1, ptr_to_play1_p_size
-	LDRB r1, [r1]
-	LDR r0, ptr_to_num_place_hold
-	BL int2string
-	BL output_string
-	MOV r0, #0x42
-	BL output_character
+	BL print_p1
 
 	LDR r0, ptr_to_game_board_black
 	BL output_string
-
 	
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
@@ -965,18 +890,18 @@ w_part2:
 	POP {r4-r12,lr}  	; Restore registers from stack
 	BX lr
 
-is_a:
+is_o:
 	;see if plater 2 can move P	
 	LDR r0, ptr_to_ball_R_L
 	LDRB r0, [r0]
 	CMP r0, #1	;if r0 is 1 this means ball is moving to player1
-	BNE a_part2
+	BNE o_part2
 	LDR r0, ptr_to_cursor_Line	; if ball is moving aways from player 2's P and the ball is 5 space away from the P
 	LDRB r0, [r0]
 	CMP r0, #75
 	BLT player2_loss_by_move_P
 
-a_part2:
+o_part2:
 	LDR r3, ptr_to_play2_head
 	LDRB r4, [r3]
 	CMP r4, #4
@@ -992,53 +917,11 @@ a_part2:
 	MOV r0, #0x73
 	BL output_character
 
-	; draw the new P
-	; move to the head of player2 P
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-
-	LDR r0, ptr_to_num_place_hold
-	LDR r1, ptr_to_play2_head
-	LDRB r1, [r1]
-	BL int2string
-	BL output_string
-
-	MOV r0, #0x3B			; 0x3b = ;
-	BL output_character
-	MOV r0, #0x38			; 0x38 = 8
-	BL output_character
-	MOV r0, #0x30			; 0x30 = 0
-	BL output_character
-	MOV r0, #0x48			; 0x48 = H
-	BL output_character
-
-	; draw the new head
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-
-	; Move one space left
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x44
-	BL output_character
-
-	; move to the tail of the P and make it black
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	LDR r1, ptr_to_play2_p_size
-	LDRB r1, [r1]
-	LDR r0, ptr_to_num_place_hold
-	BL int2string
-	BL output_string
-	MOV r0, #0x42
-	BL output_character
+	BL print_p2
 
 	LDR r0, ptr_to_game_board_black
 	BL output_string
 
-	
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1061,9 +944,9 @@ is_s:
 	BGT player1_loss_by_move_P
 
 s_part2:
-	LDR r4, ptr_to_play1_head
-	LDRB r4, [r4]
-	CMP r4, #23
+	LDR r3, ptr_to_play1_head
+	LDRB r4, [r3]
+	CMP r4, #24
 	BEQ P_move_end
 
 	; save the Cursor Position of the ball now
@@ -1072,8 +955,6 @@ s_part2:
 	MOV r0, #0x73
 	BL output_character
 
-	; draw the new P
-	; move to the head of player1 P
 	LDR r0, ptr_to_game_board_move
 	BL output_string
 
@@ -1085,69 +966,46 @@ s_part2:
 
 	MOV r0, #0x3B			; 0x3b = ;
 	BL output_character
-	MOV r0, #0x31			; 0x38 = 1
+	MOV r0, #0x31			; 0x31 = 1
 	BL output_character
 	MOV r0, #0x48			; 0x48 = H
 	BL output_character
 	
-	;make the head black
 	LDR r0, ptr_to_game_board_black
 	BL output_string
 
-	; move to the tail of the P and make it new P
-	; Move one space left
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x44
-	BL output_character
+	; update play1_head to the new head
+	LDR r3, ptr_to_play1_head
+	LDRB r4, [r3]
+	ADD r4, r4, #1
+	STRB r4, [r3]
 
-	; move down play1_p_size
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	LDR r1, ptr_to_play1_p_size
-	LDRB r1, [r1]
-	LDR r0, ptr_to_num_place_hold
-	BL int2string
-	BL output_string
-	MOV r0, #0x42
-	BL output_character
-
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-
-	; updated the new head to play1_head
-	LDR r4, ptr_to_play1_head
-	LDRB r5, [r4]
-	ADD r5, r5, #1
-	STRB r5, [r4]
+	BL print_p1
 
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
-
 	MOV r0, #0x75
 	BL output_character
 
 	POP {r4-r12,lr}  	; Restore registers from stack
 	BX lr
 
-is_d:
+is_l:
 	;see if plater 2 can move P	
 	LDR r0, ptr_to_ball_R_L
 	LDRB r0, [r0]
 	CMP r0, #1	;if r0 is 1 this means ball is moving to player1
-	BNE d_part2
+	BNE l_part2
 	LDR r0, ptr_to_cursor_Line	; if ball is moving aways from player 2's P and the ball is 3 space away from the P
 	LDRB r0, [r0]
 	CMP r0, #77
 	BLT player2_loss_by_move_P
 
-d_part2:
-	LDR r4, ptr_to_play2_head
-	LDRB r4, [r4]
-	CMP r4, #23
+l_part2:
+	LDR r3, ptr_to_play2_head
+	LDRB r4, [r3]
+	CMP r4, #24
 	BEQ P_move_end
 
 	; save the Cursor Position of the ball now
@@ -1156,8 +1014,6 @@ d_part2:
 	MOV r0, #0x73
 	BL output_character
 
-	; draw the new P
-	; move to the head of player2 P
 	LDR r0, ptr_to_game_board_move
 	BL output_string
 
@@ -1176,43 +1032,20 @@ d_part2:
 	MOV r0, #0x48			; 0x48 = H
 	BL output_character
 	
-	;make the head black
 	LDR r0, ptr_to_game_board_black
 	BL output_string
 
-	; move to the tail of the P and make it new P
-	; Move one space left
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	MOV r0, #0x31
-	BL output_character
-	MOV r0, #0x44
-	BL output_character
-	
-	; move down play2_p_size
-	LDR r0, ptr_to_game_board_move
-	BL output_string
-	LDR r1, ptr_to_play2_p_size
-	LDRB r1, [r1]
-	LDR r0, ptr_to_num_place_hold
-	BL int2string
-	BL output_string
-	MOV r0, #0x42
-	BL output_character
+	; update play1_head to the new head
+	LDR r3, ptr_to_play2_head
+	LDRB r4, [r3]
+	ADD r4, r4, #1
+	STRB r4, [r3]
 
-	LDR r0, ptr_to_game_board_White
-	BL output_string
-
-	; updated the new head to play2_head
-	LDR r4, ptr_to_play2_head
-	LDRB r5, [r4]
-	ADD r5, r5, #1
-	STRB r5, [r4]
+	BL print_p2
 
 	; move the CP back to where the ball is
 	LDR r0, ptr_to_game_board_move
 	BL output_string
-
 	MOV r0, #0x75
 	BL output_character
 
@@ -1260,6 +1093,11 @@ player1_loss_by_move_P:
 	BL int2string
 	BL output_string
 
+	LDR r0, ptr_to_text_space
+	BL output_string
+	LDR r0, ptr_to_penalties_txt_p1
+	BL output_string
+
 	B P_move_end
 
 player2_loss_by_move_P:
@@ -1302,6 +1140,10 @@ player2_loss_by_move_P:
 	BL int2string
 	BL output_string
 
+	LDR r0, ptr_to_text_space
+	BL output_string
+	LDR r0, ptr_to_penalties_txt_p2
+	BL output_string
 
 	B P_move_end
 
@@ -1429,10 +1271,10 @@ ball_down:
  	ADD r1, r1, #1
  	STRB r1, [r0]
 
- 	CMP r1, #25
+ 	CMP r1, #27
  	BNE see_ball_move_RL
 
- 	; if column is 25, move ball up
+ 	; if column is 27, move ball up
  	LDR r0, ptr_to_ball_up_down
 	LDRB r1, [r0]
 	SUB r1, r1, #1
@@ -1761,8 +1603,7 @@ ball_moving_done:
 	MOV r0, #0x44
 	Bl output_character
 
-	LDR r0, ptr_to_game_board_red
-	BL output_string
+	BL print_ball
 
 	;update FPS
 	LDR r0, ptr_to_FPS_now
