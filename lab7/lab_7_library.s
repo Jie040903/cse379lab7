@@ -53,8 +53,18 @@ p2_color: .byte	0x3
 	.global play2_p_size
 	.global see_sw2_5_push
 	.global LED_winner
-
-
+	.global powerup_logic
+	.global powerup_active
+ 	.global powerup_timer
+ 	.global powerup_spawn_timer
+ 	.global powerup_x
+ 	.global powerup_y
+ 	.global paddle1_powerup
+ 	.global paddle2_powerup
+ 	.global powerup_on
+	.global game_board_black
+	.global game_board_blue
+	.global set_pu_spawn_timer
 
 ptr_to_FPS_goal: .word FPS_goal
 ptr_to_penalties_txt_space: .word penalties_txt_space
@@ -75,6 +85,18 @@ ptr_to_ball_color: .word ball_color
 ptr_to_p1_color: .word p1_color
 ptr_to_p2_color: .word p2_color
 ptr_to_see_sw2_5_push: .word see_sw2_5_push
+ptr_to_powerup_active: .word powerup_active
+ptr_to_powerup_timer:  .word powerup_timer
+ptr_to_powerup_spawn_timer: .word powerup_spawn_timer
+ptr_to_powerup_size:      .word powerup_x
+ptr_to_paddle1_powerup: .word paddle1_powerup
+ptr_to_paddle2_powerup: .word paddle2_powerup
+ptr_to_powerup_x:		.word powerup_x
+ptr_to_powerup_y:		.word powerup_y
+ptr_to_powerup_on:		.word powerup_on
+ptr_to_game_board_black: .word game_board_black
+ptr_to_game_board_blue: .word game_board_blue
+ptr_to_game_board_move: .word game_board_move
 
 U0FR: 	.equ 0x18	; UART0 Flag Register
 
@@ -608,7 +630,7 @@ clear_txt:
 	PUSH {r4-r12,lr}	; Spill registers to stack
 	LDR r0, ptr_to_penalties_txt_space
 	BL output_string
-	MOV r5, #3
+	MOV r5, #4
 clear_next_line:
 	LDR r0, ptr_to_game_board_Gray
 	BL output_string
@@ -1042,7 +1064,7 @@ LED_winner:
 	STRB r4, [r3]
 
 	MOV r5, #0x2400
-	MOVT r5, #0x24
+	MOVT r5, #0x4
 keep_1_on:
 	SUB r5, r5, #1
 	CMP r5, #0
@@ -1052,7 +1074,7 @@ keep_1_on:
 	STRB r4, [r3]
 
 	MOV r5, #0x2400
-	MOVT r5, #0x24
+	MOVT r5, #0x4
 keep_2_on:
 	SUB r5, r5, #1
 	CMP r5, #0
@@ -1062,7 +1084,7 @@ keep_2_on:
 	STRB r4, [r3]
 
 	MOV r5, #0x2400
-	MOVT r5, #0x24
+	MOVT r5, #0x4
 keep_3_on:
 	SUB r5, r5, #1
 	CMP r5, #0
@@ -1072,7 +1094,7 @@ keep_3_on:
 	STRB r4, [r3]
 
 	MOV r5, #0x2400
-	MOVT r5, #0x24
+	MOVT r5, #0x4
 keep_4_on:
 	SUB r5, r5, #1
 	CMP r5, #0
@@ -1082,16 +1104,428 @@ keep_4_on:
 	STRB r4, [r3]
 
 	MOV r5, #0x2400
-	MOVT r5, #0x24
+	MOVT r5, #0x4
 keep_all_on:
 	SUB r5, r5, #1
 	CMP r5, #0
 	BNE keep_all_on
 
-	MOV r4, #0	; 0000
+	MOV r4, #0	; 0
 	STRB r4, [r3]
 	POP {r4-r12,lr}  	; Restore registers from stack
 	MOV pc, lr
+
+powerup_logic:
+ 	PUSH {r4-r12, lr}
+
+ 	;check if powerup is active
+ 	LDR r0, ptr_to_powerup_active
+ 	LDRB r1, [r0]
+ 	CMP r1, #1
+ 	BNE check_spawn_timer ;if not active then check the spawn timer
+
+ 	;power up is active then decrement powerup_timer
+ 	LDR r0, ptr_to_powerup_timer
+ 	LDRB r1, [r0]
+ 	SUBS r1, r1, #1
+ 	STRB r1, [r0]
+
+ 	LDR r0, ptr_to_powerup_timer
+ 	LDRB r1, [r0]
+ 	;turn on leds based off the timer
+ 	CMP r1,#10
+ 	BGE four_leds_on
+
+ 	CMP r1, #7
+ 	BGE three_leds_on
+
+ 	CMP r1, #4
+ 	BGE two_leds_on
+
+ 	CMP r1, #1
+ 	BGE one_led_on
+
+ 	;else turn off all leds
+zero_leds_on:
+ 	MOV r0, #0x0
+ 	BL illuminate_LEDs
+ 	B after_leds
+
+four_leds_on:
+ 	MOV r0, #0xF     ; all 4 LEDs on
+ 	BL illuminate_LEDs
+ 	B after_leds
+
+three_leds_on:
+ 	MOV r0, #0x7     ; 3 LEDs
+ 	BL illuminate_LEDs
+ 	B after_leds
+
+two_leds_on:
+ 	MOV r0, #0x3     ; 2 LEDs
+ 	BL illuminate_LEDs
+ 	B after_leds
+
+one_led_on:
+ 	MOV r0, #0x1     ; 1 LED
+ 	BL illuminate_LEDs
+after_leds:
+ 	CMP r1, #0
+ 	BGT exit_powerup ; if still timer > 0 then your done
+
+ 	;powerup expired
+ 	;set powerup_active to 0
+ 	LDR r0, ptr_to_powerup_active
+ 	MOV r1, #0
+ 	STRB r1, [r0]
+
+ 	;Shrink Paddle
+check_p1_shrink:
+ 	LDR r0, ptr_to_paddle1_powerup
+    LDRB r1, [r0]
+    CMP r1, #1
+    BNE check_p2_shrink
+
+    ; Player 1 had powerup, reset size
+    MOV r1, #4
+    LDR r0, ptr_to_play1_p_size
+    STRB r1, [r0]
+
+    ; Clear Player 1 powerup flag
+    LDR r0, ptr_to_paddle1_powerup
+    MOV r1, #0
+    STRB r1, [r0]
+
+    ; save the Cursor Position of the ball now
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x73
+	BL output_character
+
+	BL print_p1
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	 LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	; move the CP back to where the ball is
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x75
+	BL output_character
+
+	; set the powerup_spawn_timer
+	BL set_pu_spawn_timer
+
+	B exit_powerup
+
+check_p2_shrink:
+ 	LDR r0, ptr_to_paddle2_powerup
+    LDRB r1, [r0]
+    CMP r1, #1
+    BNE exit_powerup
+
+    ; Player 2 had powerup, reset size
+    MOV r1, #4
+    LDR r0, ptr_to_play2_p_size
+    STRB r1, [r0]
+
+    ; Clear Player 2 powerup flag
+    LDR r0, ptr_to_paddle2_powerup
+    MOV r1, #0
+    STRB r1, [r0]
+
+    ; save the Cursor Position of the ball now
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x73
+	BL output_character
+
+	BL print_p2
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	 LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x42
+	BL output_character
+
+	LDR r0, ptr_to_board_move
+	BL output_string
+	MOV r0, #0x31
+	BL output_character
+	MOV r0, #0x44
+	BL output_character
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+	; move the CP back to where the ball is
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+
+	MOV r0, #0x75
+	BL output_character
+
+	; set the powerup_spawn_timer
+	BL set_pu_spawn_timer
+
+    B exit_powerup
+
+
+check_spawn_timer:
+	;see if there is a powerup on the board
+	LDR r0, ptr_to_powerup_on
+	LDRB r1, [r0]
+	CMP r1, #1
+	BEQ exit_powerup
+ 	;decrement the spawn timer
+ 	LDR r0, ptr_to_powerup_spawn_timer
+ 	LDRB r1,[r0]
+ 	SUBS r1, r1, #1
+ 	STRB r1, [r0]
+ 	CMP r1,#0
+ 	BGT exit_powerup ; if spawn_timer > 0 dont spawn powerup
+
+ 	;spawn powerup
+ 	BL random_location ; set x and y coords for powerup
+
+ 	;save the location of CP now
+ 	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x73
+	BL output_character
+
+ 	; Move to powerup location and draw it
+     LDR r0, ptr_to_game_board_move
+     BL output_string
+
+     ; Move to the row (powerup_x)
+     LDR r1, ptr_to_powerup_x
+     LDRB r1, [r1]
+     LDR r0, ptr_to_num_place_hold
+     BL int2string
+     BL output_string
+
+     ; Move to the column (powerup_y)
+     MOV r0, #0x3B
+     BL output_character
+
+     LDR r1, ptr_to_powerup_y
+     LDRB r1, [r1]
+     LDR r0, ptr_to_num_place_hold
+     BL int2string
+     BL output_string
+
+     MOV r0, #0x48    ; H
+     BL output_character
+
+     ; Draw the powerup
+     LDR r0, ptr_to_game_board_blue
+     BL output_string
+
+    ;move the location of CP back
+ 	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x75
+	BL output_character
+
+	; set powerup_on to 1, showing there is a powerup on the board
+	LDR r0, ptr_to_powerup_on
+	MOV r1, #1
+	STRB r1, [r0]
+
+    POP {r4-r12, lr}
+ 	BX lr
+
+
+deactive_powerup:
+
+exit_powerup:
+ 	POP {r4-r12, lr}
+ 	BX lr
+
+random_location: ; need to fully implement later ; implement this in lab
+ 	;for powerup choses a random location for it to spawn
+ 	;simple fake random just for now
+ 	PUSH {r4-r12,lr}	; Spill registers to stack
+    MOV r1, #79
+ 	LDR r0, ptr_to_timer_number
+ 	LDRB r2, [r0]
+ 	ADD r1, r1, r2
+ 	LDR r0, ptr_to_ball_color
+ 	LDRB r2, [r0]
+ 	LDR r0, ptr_to_p1_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	LDR r0, ptr_to_p2_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	MUL r1, r1, r2
+ 	MOV r2, #53
+ 	MUL r1, r1, r2
+ 	MOV r2, #15
+
+ 	UDIV r3, r1, r2		; r1/15
+ 	MUL r4, r3, r2
+ 	SUB r1, r1, r4
+
+ 	ADD r1, r1, #7		; the result will be between 7 to 24
+ 	LDR r0, ptr_to_powerup_x
+ 	STRB r1, [r0]
+
+ 	MOV r1, #123
+ 	LDR r0, ptr_to_timer_number
+ 	LDRB r2, [r0]
+ 	ADD r1, r1, r2
+ 	LDR r0, ptr_to_ball_color
+ 	LDRB r2, [r0]
+ 	LDR r0, ptr_to_p1_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	LDR r0, ptr_to_p2_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	MUL r1, r1, r2
+ 	MOV r2, #61
+ 	MUL r1, r1, r2
+ 	MOV r2, #51
+
+ 	UDIV r3, r1, r2		; r1/51
+ 	MUL r4, r3, r2
+ 	SUB r1, r1, r4
+
+	ADD r1, r1, #15		; the result will be between 15 to 65
+    LDR r0, ptr_to_powerup_y
+    STRB r1, [r0]
+
+    POP {r4-r12, lr}
+ 	BX lr
+
+set_pu_spawn_timer:
+ 	PUSH {r4-r12,lr}	; Spill registers to stack
+ 	MOV r2, #447
+ 	LDR r0, ptr_to_powerup_x
+ 	LDRB r1, [r0]
+ 	ADD r1, r1, #13
+ 	MUL r1, r2, r1
+ 	LDR r0, ptr_to_powerup_y
+ 	LDRB r2, [r0]
+ 	ADD r2, r2, #23
+ 	ADD r1, r1, r2
+ 	LDR r0, ptr_to_timer_number
+ 	LDRB r2, [r0]
+ 	ADD r1, r1, r2
+ 	LDR r0, ptr_to_ball_color
+ 	LDRB r2, [r0]
+ 	LDR r0, ptr_to_p1_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	LDR r0, ptr_to_p2_color
+ 	LDRB r3, [r0]
+ 	ADD r2, r2, r3
+ 	MUL r1, r1, r2
+ 	MOV r2, #53
+ 	MUL r1, r1, r2
+ 	MOV r2, #14
+
+ 	UDIV r3, r1, r2		; r1/14
+ 	MUL r4, r3, r2
+ 	SUB r1, r1, r4
+
+ 	ADD r1, r1, #2		; the result will be between 2 to 15
+
+    LDR r0, ptr_to_powerup_spawn_timer
+    STRB r1, [r0]
+
+    POP {r4-r12, lr}
+ 	BX lr
 
 	.end
 

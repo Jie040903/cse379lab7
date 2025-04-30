@@ -48,12 +48,23 @@
 	.global user1_win_round
 	.global user2_win_round
 	.global see_sw2_5_push
+	.global powerup_active
+ 	.global powerup_timer
+ 	.global powerup_spawn_timer
+ 	.global powerup_x
+ 	.global powerup_y
+ 	.global paddle1_powerup
+ 	.global paddle2_powerup
+ 	.global powerup_on
+ 	.global powerup_logic
 
 prompt: .string "To start the game push space on the keyboard", 0
-game_pause_text: .string "The game is now paused...", 0
+game_pause_text: .string "The game is now paused...", 0xa, 0xd
+game_pause_text_1: .string "You can SW1 again to resume the game.", 0xa, 0xd
+game_pause_text_2: .string "Or Push 1 to start a new game or 2 to end the game", 0
 user1_win_string: .string "Player 1 won this game!!!", 0xa, 0xd
 keep_play_or_end: .string "Push 1 to start a new game or 2 to end the game", 0
-user2_win_string: .string "Player 2 won this game!!!", 0
+user2_win_string: .string "Player 2 won this game!!!", 0xa, 0xd
 keep_play_or_end_2: .string "Push 1 to start a new game or 2 to end the game", 0
 user1_win_round: .string "Player 1 won this round of the game, push space to start the next round.",0
 user2_win_round: .string "Player 2 won this round of the game, push space to start the next round.",0
@@ -65,7 +76,7 @@ game_board_Gray: .string 27, "[100m ", 0
 game_board_White: .string 27, "[47m ", 0
 text_White: .string 27, "[37m", 0
 game_board_black: .string 27, "[40m ", 0
-game_board_blue: .string 27, "[44m ", 0
+game_board_blue: .string 27, "[46m ", 0
 game_board_red: .string 27, "[41m ", 0
 game_board_move: .string 27, "[", 0					; after game_board_move, user output character for the amount of space want to move
 													; output character "A" for up		0x41
@@ -108,6 +119,14 @@ FPS_LV: .byte 0x01				; 1=30, 2=35, 3=40, 4=45, 5=50, 6=55, 7=60
 key_lock: .byte 0x00			; 0 = only space key will work
 					; 1 = wasd will work
 					; 2 = 1 and 2 will work
+powerup_active:      .byte 0      ; 0 if no powerup active, 1 if active
+powerup_timer:       .byte 0      ; countdown timer for active powerup
+powerup_spawn_timer: .byte 0x05      ; countdown timer until next powerup spawns
+powerup_x:           .byte 0      ; x coordinate of powerup
+powerup_y:           .byte 0      ; y coordinate of powerup
+paddle1_powerup:     .byte 0      ; 1 = paddle 1 is powered up
+paddle2_powerup:     .byte 0      ; 1 = paddle 2 is powered up
+powerup_on:		.byte 0      ; 1 = powerup is on the board, 0 = it is not draw
 
 	.text
 
@@ -140,6 +159,8 @@ key_lock: .byte 0x00			; 0 = only space key will work
 	.global p1_win_RGB
 	.global p2_win_RGB
 	.global LED_winner
+	.global set_pu_spawn_timer
+
 
 ptr_to_prompt:		.word prompt
 ptr_to_pause:		.word pause
@@ -188,6 +209,15 @@ ptr_to_penalties_txt_p2: .word penalties_txt_p2
 ptr_to_user1_win_round: .word user1_win_round
 ptr_to_user2_win_round: .word user2_win_round
 ptr_to_see_sw2_5_push: .word see_sw2_5_push
+ptr_to_powerup_active: .word powerup_active
+ptr_to_powerup_timer:  .word powerup_timer
+ptr_to_powerup_spawn_timer: .word powerup_spawn_timer
+ptr_to_powerup_size:      .word powerup_x
+ptr_to_paddle1_powerup: .word paddle1_powerup
+ptr_to_paddle2_powerup: .word paddle2_powerup
+ptr_to_powerup_x:		.word powerup_x
+ptr_to_powerup_y:		.word powerup_y
+ptr_to_powerup_on:		.word powerup_on
 
 
 lab7:				; This is your main routine which is called from your C wrapper.
@@ -196,6 +226,8 @@ lab7:				; This is your main routine which is called from your C wrapper.
  	bl gpio_btn_and_LED_init
  	bl uart_interrupt_init
  	bl gpio_interrupt_init
+
+ 	bl set_pu_spawn_timer
 
 	LDR r0, ptr_to_game_board_Gray
 	BL output_string
@@ -251,6 +283,12 @@ lab7:				; This is your main routine which is called from your C wrapper.
 	LDR r0, ptr_to_ball_R_L_speed
 	MOV r1, #1
 	STRB r1, [r0]
+
+    MOV r1, #0
+    LDR r0, ptr_to_powerup_on
+	STRB r1, [r0]
+
+
 white_loop:
 	LDR r4, ptr_to_cursor_Line
  	LDRB r5, [r4]
@@ -1171,6 +1209,8 @@ Timer_Handler:
 	MOV r2, #0
 	STRB r2, [r1]
 
+	BL powerup_logic ;call powerup logic once per second after updating timer
+
 	; save the Cursor Position of the ball now
 	LDR r0, ptr_to_game_board_move
 	BL output_string
@@ -1605,6 +1645,138 @@ ball_moving_done:
 
 	BL print_ball
 
+	;new code check for powerup collision
+
+ 	LDR r0, ptr_to_powerup_active
+ 	LDRB r1, [r0]
+ 	CMP r1,#0
+ 	BNE no_powerup_collision ; powerup is active skip the check
+
+ 	;load the ball position
+ 	LDR r2, ptr_to_cursor_Line
+ 	LDRB r3, [r2] ; ball y position
+ 	LDR r2, ptr_to_cursor_Column
+ 	LDRB r4, [r2] ; ball X position
+
+ 	;load powerup position
+ 	LDR r5, ptr_to_powerup_y
+ 	LDRB r6, [r5] ;power up y position
+ 	LDR r5, ptr_to_powerup_x
+ 	LDRB r7, [r5] ;powerup X position
+
+ 	;CMP Y cords
+ 	CMP r3,r6
+ 	BNE no_powerup_collision ;if not == then no collision
+
+ 	;CMP X cords
+ 	CMP r4, r7
+ 	BNE no_powerup_collision ;if not == then no collision
+
+ 	;ball collided set powerup active
+ 	LDR r0, ptr_to_powerup_active
+ 	MOV r1, #1
+ 	STRB r1,[r0]
+
+ 	;set powerup timer to 12
+ 	LDR r0, ptr_to_powerup_timer
+ 	MOV r1, #12
+ 	STRB r1,[r0]
+ 	;set the location of power up to 0,0
+ 	LDR r0, ptr_to_powerup_x
+    MOV r1, #0
+    STRB r1, [r0]
+    LDR r0, ptr_to_powerup_y
+    STRB r1, [r0]
+    LDR r0, ptr_to_powerup_on
+	STRB r1, [r0]
+
+	MOV r0, #0xF     ; all 4 LEDs on
+ 	BL illuminate_LEDs
+
+ 	;choose who gets powerup based on ball direction
+ 	LDR r0, ptr_to_ball_R_L
+ 	LDRB r1, [r0]
+ 	CMP r1, #0
+ 	BNE player2_gets_powerup ;if not moving right
+
+ 	; player 1 gets it
+ 	LDR r0, ptr_to_play1_head
+ 	LDRB r1, [r0]
+ 	CMP r1, #15
+ 	IT GE
+ 	SUBGE r1, r1, #4
+ 	STRB r1, [r0]
+
+ 	LDR r0, ptr_to_play1_p_size
+ 	MOV r1, #8
+ 	STRB r1, [r0]
+
+ 	MOV r1, #1
+ 	LDR r0, ptr_to_paddle1_powerup
+ 	STRB r1, [r0]
+
+ 	; save the Cursor Position of the ball now
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x73
+	BL output_character
+
+	BL print_p1
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	; move the CP back to where the ball is
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+
+	MOV r0, #0x75
+	BL output_character
+
+ 	B after_powerup_collect
+
+player2_gets_powerup:
+	; player 2 gets power up
+	 LDR r0, ptr_to_play2_head
+ 	LDRB r1, [r0]
+ 	CMP r1, #15
+ 	IT GE
+ 	SUBGE r1, r1, #4
+ 	STRB r1, [r0]
+
+ 	MOV r1, #8
+ 	LDR r0, ptr_to_play2_p_size
+ 	STRB r1, [r0]
+
+ 	MOV r1, #1
+ 	LDR r0, ptr_to_paddle2_powerup
+ 	STRB r1, [r0]
+
+	; save the Cursor Position of the ball now
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x73
+	BL output_character
+
+	BL print_p2
+
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+
+	; move the CP back to where the ball is
+	LDR r0, ptr_to_game_board_move
+	BL output_string
+	MOV r0, #0x75
+	BL output_character
+
+
+after_powerup_collect:
+ 	;clear powerup from the board need to implement this in lab
+
+
+  	;end new code
+no_powerup_collision:
+
 	;update FPS
 	LDR r0, ptr_to_FPS_now
 	LDRB r1, [r0]
@@ -1643,4 +1815,10 @@ player2_loss_round_nom:
 	BX lr       	; Return
 
 end_game:
+	LDR r0, ptr_to_game_board_black
+	BL output_string
+	MOV r0, #0x0c
+	BL output_character
+
+	POP {r4-r12,lr}  	; Restore registers from stack
 	.end
